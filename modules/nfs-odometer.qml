@@ -1,5 +1,5 @@
 // nfs-odometer — uptime as a mechanical odometer. One minute of uptime is one kilometre
-// (the last wheel, the tenths, turns every six seconds). Hover for the real uptime.
+// (the last wheel ticks once per minute). Hover for the real uptime.
 // Settings (all optional): kmPerMinute (default 1), accent.
 import QtQuick
 import Quickshell.Io
@@ -17,7 +17,7 @@ Item {
   readonly property real kmPerMinute: settings && settings.kmPerMinute ? Number(settings.kmPerMinute) : 1
 
   property real seconds: 0
-  readonly property real tenths: Math.floor(seconds / 60 * kmPerMinute * 10)
+  readonly property real km: Math.floor(seconds / 60 * kmPerMinute)
   readonly property real wheelH: 14
   readonly property real wheelW: 9
 
@@ -61,15 +61,14 @@ Item {
       anchors.centerIn: parent
       spacing: 1
 
-      // Five whole-km wheels and one tenths wheel
+      // Five whole-km wheels
       Repeater {
-        model: 6
+        model: 5
         Item {
           id: wheel
           required property int index
-          readonly property bool tenthsWheel: index === 5
           // Ever-growing integer for this wheel's place; the column only shows it modulo 10
-          readonly property real target: Math.floor(root.tenths / Math.pow(10, 5 - index))
+          readonly property real target: Math.floor(root.km / Math.pow(10, 4 - index))
           property real shown: target
           Behavior on shown { enabled: root.armed; NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
 
@@ -80,9 +79,9 @@ Item {
           Rectangle {
             anchors.fill: parent
             radius: 2
-            color: wheel.tenthsWheel ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.28) : "#120a1f"
+            color: "#120a1f"
             border.width: 1
-            border.color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, wheel.tenthsWheel ? 0.0 : 0.22)
+            border.color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.22)
             clip: true
 
             Column {
@@ -97,7 +96,7 @@ Item {
                   horizontalAlignment: Text.AlignHCenter
                   verticalAlignment: Text.AlignVCenter
                   text: index % 10
-                  color: wheel.tenthsWheel ? "#ffe8fa" : "#f4e9ff"
+                  color: "#f4e9ff"
                   font.family: root.family
                   font.pixelSize: 12
                   font.bold: true
