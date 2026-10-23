@@ -1,7 +1,4 @@
-// nfs-heat — wanted level. Styled as a car engine temperature gauge (C ... H) matching the dashboard look.
-// Settings (all optional):
-//   source     "auto" (default: temperature, falls back to load) | "temp" | "load"
-//   thresholds five numbers; °C for temp (default 55,65,75,85,92), percent of load for load
+// nfs-heat.qml — Hybrid Sport Canvas Edition (Inclinación customizable de paralelogramos)
 import QtQuick
 import Quickshell.Io
 
@@ -15,11 +12,15 @@ Item {
   readonly property real barH: bar ? bar.barSize : 26
   readonly property color red: "#ff2b4d"
   readonly property color blue: "#2f6bff"
+  readonly property color yellow: "#ffb703"
   readonly property color pink: "#ff2bd6"
+
+  // Ángulo de inclinación personalizable (Ej: 15 para inclinar hacia adelante)
+  readonly property real slantAngle: 15
 
   // Readings
   property real temp: 0        // °C, 0 = no sensor found
-  property real loadPct: 0     // 1-min load average as % of the cores
+  property real loadPct: 0     // 1-min load average as % of cores
 
   readonly property string source: settings && settings.source ? String(settings.source) : "auto"
   readonly property string mode: source === "load" ? "load" : (source === "temp" ? "temp" : (temp > 0 ? "temp" : "load"))
@@ -35,7 +36,7 @@ Item {
   readonly property bool chase: level >= 4
   readonly property string tipText: "TEMP " + level + "/5  ·  " + (mode === "temp" ? Math.round(temp) + " °C" : "load " + Math.round(loadPct) + " %")
 
-  // Alert colour (flashes red/blue when hot)
+  // Alert colour (flashes red/blue when hot/chase)
   readonly property color alertColor: phase ? red : blue
 
   property bool phase: false
@@ -76,42 +77,39 @@ Item {
   Rectangle {
     id: gaugeContainer
     anchors.verticalCenter: parent.verticalCenter
-    width: 108
-    height: root.barH - 6
-    radius: height / 2.6
-    color: "#07040d"
-    border.width: 1
-    border.color: root.chase ? root.alertColor : Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.5)
+    width: 116
+    height: root.barH - 4
+    radius: height / 2.4
+    color: "#080612"
+    border.width: 1.5
+    border.color: root.chase ? root.alertColor : Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.4)
 
-    // Tornillos / remaches laterales
+    // Remache metálico izquierdo
     Rectangle {
       width: 4; height: 4; radius: 2
       x: 6
       anchors.verticalCenter: parent.verticalCenter
-      color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.3)
-    }
-    Rectangle {
-      width: 4; height: 4; radius: 2
-      x: parent.width - 10
-      anchors.verticalCenter: parent.verticalCenter
-      color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.3)
+      color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.4)
+      border.width: 0.5
+      border.color: "#000000"
     }
 
-    // "C" (Cold) en el extremo izquierdo
+    // "C" (Cold)
     Text {
-      x: 15
+      x: 14
       anchors.verticalCenter: parent.verticalCenter
       text: "C"
       color: root.fg
-      font.pixelSize: 9
+      font.pixelSize: 10
       font.bold: true
+      font.family: "Monospace"
     }
 
-    // Arco del medidor
+    // Canvas Dibujador de Bloques Inclinados (Garantiza inclinación exacta)
     Canvas {
-      id: gaugeCanvas
+      id: slantedCanvas
       x: 26
-      width: 40
+      width: 46
       height: parent.height
       antialiasing: true
 
@@ -119,66 +117,34 @@ Item {
         var ctx = getContext("2d")
         ctx.reset()
 
-        var cx = width / 2
-        var cy = height - 2
-        var radius = Math.min(18, height - 5)
-        var a0 = -Math.PI * 0.85
-        var a1 = -Math.PI * 0.15
-        var span = a1 - a0
+        var numBlocks = 5
+        var blockWidth = 5.5
+        var blockHeight = 12
+        var gap = 2.5
+        var startX = 4
+        var startY = (height - blockHeight) / 2
 
-        ctx.lineCap = "butt"
+        // Cálculo exacto del desplazamiento según ángulo rad
+        var rad = (root.slantAngle * Math.PI) / 180
+        var dx = Math.tan(rad) * blockHeight
 
-        // 1. Arco base
-        ctx.beginPath()
-        ctx.arc(cx, cy, radius, a0, a1, false)
-        ctx.strokeStyle = Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.85)
-        ctx.lineWidth = 2
-        ctx.stroke()
+        for (var i = 0; i < numBlocks; i++) {
+          var isActive = i < root.level
+          var col = isActive 
+            ? (i >= 3 ? (root.chase ? root.alertColor : root.red) : (i === 2 ? root.yellow : root.fg))
+            : Qt.rgba(1, 1, 1, 0.08)
 
-        // 2. Zona roja (caliente), extremo derecho
-        ctx.beginPath()
-        ctx.arc(cx, cy, radius, a0 + span * 0.78, a1, false)
-        ctx.strokeStyle = root.red
-        ctx.lineWidth = 2
-        ctx.stroke()
+          var bx = startX + i * (blockWidth + gap)
 
-        // 3. Marcas de graduación
-        for (var i = 0; i <= 5; i++) {
-          var ang = a0 + (i / 5) * span
+          ctx.fillStyle = col
           ctx.beginPath()
-          ctx.moveTo(cx + (radius - 5) * Math.cos(ang), cy + (radius - 5) * Math.sin(ang))
-          ctx.lineTo(cx + (radius - 2) * Math.cos(ang), cy + (radius - 2) * Math.sin(ang))
-          ctx.strokeStyle = Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.55)
-          ctx.lineWidth = 1
-          ctx.stroke()
+          ctx.moveTo(bx + dx, startY)
+          ctx.lineTo(bx + blockWidth + dx, startY)
+          ctx.lineTo(bx + blockWidth, startY + blockHeight)
+          ctx.lineTo(bx, startY + blockHeight)
+          ctx.closePath()
+          ctx.fill()
         }
-
-        // 4. Aguja según nivel (0..5)
-        var lv = Math.max(0, Math.min(5, root.level))
-        var na = a0 + (lv / 5) * span
-        var needleColor = root.chase ? root.alertColor : "#ffffff"
-
-        ctx.strokeStyle = needleColor
-        ctx.lineWidth = 1.5
-        ctx.beginPath()
-        ctx.moveTo(cx, cy)
-        ctx.lineTo(cx + (radius - 3) * Math.cos(na), cy + (radius - 3) * Math.sin(na))
-        ctx.stroke()
-
-        // 5. Pivote
-        ctx.fillStyle = "#1a1a24"
-        ctx.beginPath()
-        ctx.arc(cx, cy, 2.6, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.strokeStyle = needleColor
-        ctx.lineWidth = 1
-        ctx.beginPath()
-        ctx.arc(cx, cy, 2.6, 0, Math.PI * 2)
-        ctx.stroke()
-        ctx.fillStyle = needleColor
-        ctx.beginPath()
-        ctx.arc(cx, cy, 0.9, 0, Math.PI * 2)
-        ctx.fill()
       }
 
       Component.onCompleted: requestPaint()
@@ -186,27 +152,28 @@ Item {
 
       Connections {
         target: root
-        function onLevelChanged() { gaugeCanvas.requestPaint() }
-        function onPhaseChanged() { gaugeCanvas.requestPaint() }
-        function onFgChanged() { gaugeCanvas.requestPaint() }
+        function onLevelChanged() { slantedCanvas.requestPaint() }
+        function onPhaseChanged() { slantedCanvas.requestPaint() }
+        function onFgChanged() { slantedCanvas.requestPaint() }
       }
     }
 
-    // "H" (Hot) en rojo, a la derecha del arco
+    // "H" (Hot)
     Text {
-      x: 67
+      x: 75
       anchors.verticalCenter: parent.verticalCenter
       text: "H"
       color: root.red
-      font.pixelSize: 9
+      font.pixelSize: 10
       font.bold: true
+      font.family: "Monospace"
     }
 
-    // Icono de temperatura de motor (termómetro sobre líneas de agua)
+    // Icono Termómetro Neón
     Canvas {
       id: tempSymbol
-      x: 80
-      width: 14
+      x: 89
+      width: 12
       height: parent.height
       antialiasing: true
 
@@ -219,19 +186,18 @@ Item {
         ctx.fillStyle = col
         ctx.strokeStyle = col
 
-        // Termómetro: tallo + bulbo
         ctx.beginPath()
-        ctx.rect(5.5, cy - 6, 2, 8)
-        ctx.fill()
-        ctx.beginPath()
-        ctx.arc(6.5, cy + 3.5, 2.6, 0, Math.PI * 2)
+        ctx.rect(4.5, cy - 5, 2, 7)
         ctx.fill()
 
-        // Marcas del tallo
+        ctx.beginPath()
+        ctx.arc(5.5, cy + 3, 2.5, 0, Math.PI * 2)
+        ctx.fill()
+
         ctx.lineWidth = 1
         ctx.beginPath()
-        ctx.moveTo(8.5, cy - 4); ctx.lineTo(10.5, cy - 4)
-        ctx.moveTo(8.5, cy - 1.5); ctx.lineTo(10.5, cy - 1.5)
+        ctx.moveTo(7.5, cy - 3); ctx.lineTo(9.5, cy - 3)
+        ctx.moveTo(7.5, cy - 1); ctx.lineTo(9.5, cy - 1)
         ctx.stroke()
       }
 
@@ -243,6 +209,16 @@ Item {
         function onChaseChanged() { tempSymbol.requestPaint() }
         function onPhaseChanged() { tempSymbol.requestPaint() }
       }
+    }
+
+    // Remache metálico derecho
+    Rectangle {
+      width: 4; height: 4; radius: 2
+      x: parent.width - 9
+      anchors.verticalCenter: parent.verticalCenter
+      color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.4)
+      border.width: 0.5
+      border.color: "#000000"
     }
   }
 

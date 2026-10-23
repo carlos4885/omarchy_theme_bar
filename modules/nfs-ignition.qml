@@ -1,8 +1,8 @@
-// nfs-ignition — Porsche-style ignition switch for the Omarchy bar.
-// Left click : the key turns to START, the engine cranks and catches, the Omarchy menu opens,
-//              the key springs back.
-// Right click: key turns to ACC/ON and back, opens a terminal.
-// Settings (optional): accent, sound (false = silent start).
+// nfs-ignition — push-start button for the Omarchy bar.
+// Left click : amber ring blinks while the engine cranks, turns green as it catches,
+//              the Omarchy menu opens, then the button settles back to idle.
+// Right click: quick green flash, opens a terminal.
+// Settings (optional): sound (false = silent start).
 import QtQuick
 import Quickshell.Io
 
@@ -12,12 +12,15 @@ Item {
   property string moduleName: "nfs-ignition"
   property var settings
 
-  readonly property color fg: bar ? bar.foreground : "#19d3c5"
-  readonly property color accent: settings && settings.accent ? settings.accent : "#ff2fd0"
-  readonly property color gold: "#d9b24c"
+  readonly property color amber: "#ffb000"
+  readonly property color amberDim: "#7a5200"
+  readonly property color green: "#3dff8a"
 
   implicitWidth: 30
   implicitHeight: bar ? bar.barSize : 26
+
+  // How long the ring blinks before the engine "catches" (ms)
+  property int crankMs: 640
 
   // Engine sound: sounds/nfs-engine-start.wav, installed next to the modules
   readonly property bool soundOn: !(settings && settings.sound === false)
@@ -30,10 +33,18 @@ Item {
   }
   function crank() { if (root.soundOn && !engine.running) engine.running = true }
 
-  // 0 = OFF, 45 = ON, 90 = START
-  property real turn: 0
+  function mix(a, b, t) {
+    return Qt.rgba(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t,
+                   a.b + (b.b - a.b) * t, a.a + (b.a - a.a) * t)
+  }
+
+  // 0 = idle (amber), 1 = running (green)
+  property real lit: 0
+  property real ringOp: 0.35
   property bool busy: false
-  readonly property real power: Math.max(0, Math.min(1, turn / 90))
+
+  readonly property color tone: mix(amber, green, lit)
+  readonly property color edge: mix(amberDim, green, lit)
 
   Item {
     id: cyl
@@ -43,65 +54,80 @@ Item {
     scale: hover.hovered ? 1.08 : 1.0
     Behavior on scale { NumberAnimation { duration: 120 } }
 
-    // Glow that builds as the key turns
+    // Soft glow behind the button
     Rectangle {
       anchors.centerIn: parent
       width: 30; height: 30; radius: 15
-      color: root.accent
-      opacity: 0.16 * root.power + (hover.hovered ? 0.08 : 0)
-    }
-    Rectangle {
-      anchors.centerIn: parent
-      width: 27; height: 27; radius: 13.5
-      color: root.accent
-      opacity: 0.26 * root.power
+      color: root.tone
+      opacity: 0.08 + 0.2 * root.lit + (hover.hovered ? 0.06 : 0)
     }
 
     // Bezel
     Rectangle {
+      id: bezel
       anchors.fill: parent
       radius: width / 2
       color: "#07040d"
       border.width: 1.5
-      border.color: Qt.tint(root.fg, Qt.rgba(root.accent.r, root.accent.g, root.accent.b, root.power))
+      border.color: root.edge
     }
 
-    // OFF / ON / START marks
-    Repeater {
-      model: [0, 45, 90]
-      Rectangle {
-        required property int modelData
-        width: 2.4; height: 2.4; radius: 1.2
-        x: 12 + 8.6 * Math.sin(modelData * Math.PI / 180) - width / 2
-        y: 12 - 8.6 * Math.cos(modelData * Math.PI / 180) - height / 2
-        color: (modelData > 0 && root.turn >= modelData - 1) ? root.accent : Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.45)
-      }
+    // Status ring (blinks while cranking)
+    Rectangle {
+      anchors.fill: parent
+      anchors.margins: 2.4
+      radius: width / 2
+      color: "transparent"
+      border.width: 1.4
+      border.color: root.tone
+      opacity: root.ringOp
     }
 
-    // The key (seen head-on: a flat black head with a gold crest)
-    Item {
-      width: 24; height: 24
+    // Centre disc
+    Rectangle {
+      id: disc
+      width: 14; height: 14; radius: 7
       anchors.centerIn: parent
-      rotation: root.turn
-      transformOrigin: Item.Center
+      border.width: 1
+      border.color: Qt.rgba(root.tone.r, root.tone.g, root.tone.b, 0.55)
+      gradient: Gradient {
+        GradientStop { position: 0.0; color: "#2a2438" }
+        GradientStop { position: 1.0; color: "#0a0710" }
+      }
+      scale: press.pressed ? 0.92 : 1.0
+      Behavior on scale { NumberAnimation { duration: 80 } }
 
+      // Glass highlight
       Rectangle {
-        anchors.centerIn: parent
-        width: 6; height: 15; radius: 3
-        color: "#15111d"
-        border.width: 1
-        border.color: "#aab0bd"
-      }
-      Rectangle {   // crest
-        width: 3; height: 4; radius: 1
-        color: root.gold
+        width: 8; height: 4; radius: 2
         anchors.horizontalCenter: parent.horizontalCenter
-        y: 12 - 6.4
+        y: 1.5
+        color: "white"
+        opacity: 0.09
       }
-      Rectangle {   // pivot
+
+      // Power symbol
+      Canvas {
+        id: icon
+        width: 10; height: 10
         anchors.centerIn: parent
-        width: 2.4; height: 2.4; radius: 1.2
-        color: "#aab0bd"
+        property color c: root.tone
+        onCChanged: requestPaint()
+        onPaint: {
+          var ctx = getContext("2d")
+          ctx.reset()
+          var s = width / 24
+          ctx.scale(s, s)
+          ctx.strokeStyle = c
+          ctx.lineWidth = 2.6
+          ctx.lineCap = "round"
+          ctx.beginPath()
+          ctx.moveTo(12, 3); ctx.lineTo(12, 11)
+          ctx.stroke()
+          ctx.beginPath()
+          ctx.arc(12, 12.4, 8, -135 * Math.PI / 180, -45 * Math.PI / 180, true)
+          ctx.stroke()
+        }
       }
     }
   }
@@ -118,25 +144,44 @@ Item {
   SequentialAnimation {
     id: startAnim
     ScriptAction { script: { root.busy = true; root.crank() } }
-    NumberAnimation { target: root; property: "turn"; to: 90; duration: 260; easing.type: Easing.OutBack; easing.overshoot: 1.2 }
+    // Cranking: the ring blinks amber
+    SequentialAnimation {
+      loops: 2
+      NumberAnimation { target: root; property: "ringOp"; to: 1.0; duration: root.crankMs / 4 }
+      NumberAnimation { target: root; property: "ringOp"; to: 0.2; duration: root.crankMs / 4 }
+    }
+    // Engine catches: turns green and opens the menu
+    ParallelAnimation {
+      NumberAnimation { target: root; property: "lit"; to: 1; duration: 200; easing.type: Easing.OutCubic }
+      NumberAnimation { target: root; property: "ringOp"; to: 1.0; duration: 200 }
+    }
     ScriptAction { script: if (root.bar) root.bar.run("omarchy-shell shell toggle omarchy.menu '{\"menu\":\"root\"}'") }
-    // The key stays at START while the engine cranks and lets go as it catches
     PauseAnimation { duration: root.soundOn ? 700 : 450 }
-    NumberAnimation { target: root; property: "turn"; to: 0; duration: 320; easing.type: Easing.OutCubic }
+    ParallelAnimation {
+      NumberAnimation { target: root; property: "lit"; to: 0; duration: 320; easing.type: Easing.OutCubic }
+      NumberAnimation { target: root; property: "ringOp"; to: 0.35; duration: 320 }
+    }
     ScriptAction { script: root.busy = false }
   }
 
   SequentialAnimation {
     id: accAnim
     ScriptAction { script: root.busy = true }
-    NumberAnimation { target: root; property: "turn"; to: 45; duration: 200; easing.type: Easing.OutCubic }
+    ParallelAnimation {
+      NumberAnimation { target: root; property: "lit"; to: 1; duration: 180; easing.type: Easing.OutCubic }
+      NumberAnimation { target: root; property: "ringOp"; to: 1.0; duration: 180 }
+    }
     ScriptAction { script: if (root.bar) root.bar.run("xdg-terminal-exec") }
     PauseAnimation { duration: 350 }
-    NumberAnimation { target: root; property: "turn"; to: 0; duration: 260; easing.type: Easing.OutCubic }
+    ParallelAnimation {
+      NumberAnimation { target: root; property: "lit"; to: 0; duration: 260; easing.type: Easing.OutCubic }
+      NumberAnimation { target: root; property: "ringOp"; to: 0.35; duration: 260 }
+    }
     ScriptAction { script: root.busy = false }
   }
 
   MouseArea {
+    id: press
     anchors.fill: parent
     acceptedButtons: Qt.LeftButton | Qt.RightButton
     onClicked: function(mouse) {
