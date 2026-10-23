@@ -46,7 +46,7 @@ Item {
     onTriggered: root.phase = !root.phase
   }
 
-  implicitWidth: gaugeContainer.width + 16
+  implicitWidth: gaugeContainer.width
   implicitHeight: barH
 
   function sample(line) {
